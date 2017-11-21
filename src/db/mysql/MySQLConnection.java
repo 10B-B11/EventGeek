@@ -15,6 +15,7 @@ import entity.Item.ItemBuilder;
 import external.ExternalAPI;
 import external.ExternalAPIFactory;
 
+// This is a singleton pattern.
 public class MySQLConnection implements DBConnection {
 	private static MySQLConnection instance;
 
@@ -25,7 +26,7 @@ public class MySQLConnection implements DBConnection {
 		return instance;
 	}
 
-	// Import java.sql.Connection
+	// Import java.sql.Connection. Don't use com.mysql.jdbc.Connection.
 	private Connection conn = null;
 
 	private MySQLConnection() {
@@ -46,8 +47,7 @@ public class MySQLConnection implements DBConnection {
 		if (conn != null) {
 			try {
 				conn.close();
-			} catch (Exception e) {
-				// Ignore
+			} catch (Exception e) { /* ignored */
 			}
 		}
 	}
@@ -59,24 +59,21 @@ public class MySQLConnection implements DBConnection {
 			PreparedStatement statement = conn.prepareStatement(query);
 			for (String itemId : itemIds) {
 				statement.setString(1, userId);
-				;
 				statement.setString(2, itemId);
 				statement.execute();
 			}
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
-
 	}
 
 	@Override
 	public void unsetFavoriteItems(String userId, List<String> itemIds) {
-		String query = "DELETE FROM history WHERE user_id=? AND item_id=? ";
+		String query = "DELETE FROM history WHERE user_id = ? and item_id = ?";
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			for (String itemId : itemIds) {
 				statement.setString(1, userId);
-				;
 				statement.setString(2, itemId);
 				statement.execute();
 			}
@@ -87,57 +84,21 @@ public class MySQLConnection implements DBConnection {
 
 	@Override
 	public Set<String> getFavoriteItemIds(String userId) {
-		Set<String> favoriteIds = new HashSet<>();
+		Set<String> favoriteItems = new HashSet<>();
 		try {
-			String sql = "SELECT items.item_id from items, history "
-					+ "WHERE items.item_id = history.item_id AND user_id = ? ";
+			String sql = "SELECT item_id from history WHERE user_id = ?";
 			PreparedStatement statement = conn.prepareStatement(sql);
 			statement.setString(1, userId);
 			ResultSet rs = statement.executeQuery();
 			while (rs.next()) {
-				favoriteIds.add(rs.getString("item_id"));
+				String itemId = rs.getString("item_id");
+				favoriteItems.add(itemId);
 			}
-		} catch (Exception e) {
-			System.out.println(e.getMessage());
+		} catch (SQLException e) {
+			e.printStackTrace();
 		}
-		return favoriteIds;
+		return favoriteItems;
 	}
-
-	// @Override
-	// public Set<Item> getFavoriteItems(String userId) {
-	// Set<Item> favorites = new HashSet<>();
-	// try {
-	// String sql = "SELECT * from items, history "
-	// + "WHERE items.item_id = history.item_id AND user_id = ? ";
-	// PreparedStatement statement = conn.prepareStatement(sql);
-	// statement.setString(1, userId);
-	// ResultSet rs = statement.executeQuery();
-	// int i = 1;
-	// while (rs.next()) {
-	// Item item = new Item.ItemBuilder()
-	// .setItemId(rs.getString("item_id"))
-	// .setName(rs.getString("name"))
-	// .setCity(rs.getString("city"))
-	// .setState(rs.getString("state"))
-	// .setCountry(rs.getString("country"))
-	// .setZipcode(rs.getString("zipcode"))
-	// .setRating(rs.getDouble("rating"))
-	// .setAddress(rs.getString("address"))
-	// .setLatitude(rs.getDouble("latitude"))
-	// .setLongitude(rs.getDouble("longitude"))
-	// .setDescription(rs.getString("description"))
-	// .setSnippet(rs.getString("snippet"))
-	// .setSnippetUrl(rs.getString("snippet_url"))
-	// .setImageUrl(rs.getString("image_url"))
-	// .setUrl(rs.getString("url"))
-	// .build();
-	// favorites.add(item);
-	// }
-	// } catch (Exception e) {
-	// System.out.println(e.getMessage());
-	// }
-	// return favorites;
-	// }
 
 	@Override
 	public Set<Item> getFavoriteItems(String userId) {
@@ -171,8 +132,6 @@ public class MySQLConnection implements DBConnection {
 					builder.setSnippetUrl(rs.getString("snippet_url"));
 					builder.setImageUrl(rs.getString("image_url"));
 					builder.setUrl(rs.getString("url"));
-					builder.setLocalDate(rs.getString("local_date"));
-					builder.setLocalTime(rs.getString("local_time"));
 				}
 
 				// Join categories information into builder.
@@ -193,14 +152,13 @@ public class MySQLConnection implements DBConnection {
 			e.printStackTrace();
 		}
 		return favoriteItems;
-
 	}
 
 	@Override
 	public Set<String> getCategories(String itemId) {
 		Set<String> categories = new HashSet<>();
 		try {
-			String sql = "SELECT category from categories WHERE item_id = ?";
+			String sql = "SELECT category from categories WHERE item_id = ? ";
 			PreparedStatement statement = conn.prepareStatement(sql);
 			statement.setString(1, itemId);
 			ResultSet rs = statement.executeQuery();
@@ -214,26 +172,10 @@ public class MySQLConnection implements DBConnection {
 	}
 
 	@Override
-	public List<Item> searchItems(String userId, double lat, double lon, String term) {
-		// Connect to external API
-		ExternalAPI api = ExternalAPIFactory.getExternalAPI(); // moved here
-		List<Item> items = api.search(lat, lon, term);
-		for (Item item : items) {
-			// Save the item into our own db.
-			saveItem(item);
-		}
-		return items;
-	}
-
-	@Override
 	public void saveItem(Item item) {
-		
-		System.out.println("item local date: " + item.getLocalDate());
-		System.out.println("item local time: " + item.getLocalTime());
-		
 		try {
 			// First, insert into items table
-			String sql = "INSERT IGNORE INTO items VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+			String sql = "INSERT IGNORE INTO items VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
 			PreparedStatement statement = conn.prepareStatement(sql);
 			statement.setString(1, item.getItemId());
@@ -251,25 +193,71 @@ public class MySQLConnection implements DBConnection {
 			statement.setString(13, item.getSnippetUrl());
 			statement.setString(14, item.getImageUrl());
 			statement.setString(15, item.getUrl());
-			statement.setString(16, item.getLocalTime());
-			statement.setString(17, item.getLocalDate());
-
 			statement.execute();
 
-			// Second, update categories table for each category
-			sql = "INSERT IGNORE INTO categories VALUES(?,?)";
-
+			// Second, update categories table for each category.
+			sql = "INSERT IGNORE INTO categories VALUES (?,?)";
 			for (String category : item.getCategories()) {
 				statement = conn.prepareStatement(sql);
 				statement.setString(1, item.getItemId());
 				statement.setString(2, category);
-
 				statement.execute();
 			}
-
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
-
 	}
+
+	@Override
+	public List<Item> searchItems(String userId, double lat, double lon, String term) {
+		// Connect to external API
+		ExternalAPI api = ExternalAPIFactory.getExternalAPI(); // moved here
+		List<Item> items = api.search(lat, lon, term);
+		for (Item item : items) {
+			// Save the item into our own db
+			saveItem(item);
+		}
+		return items;
+	}
+	@Override
+	public String getFullname(String userId) {
+		String name = "";
+		try {
+			if (conn == null) {
+				return "";
+			}
+			String sql = "SELECT first_name, last_name from users WHERE user_id = ?";
+			PreparedStatement statement = conn.prepareStatement(sql);
+			statement.setString(1, userId);
+			ResultSet rs = statement.executeQuery();
+			if (rs.next()) {
+				name += String.join(" ", rs.getString("first_name"), rs.getString("last_name"));
+			}
+		} catch (Exception e) {
+			System.out.println(e.getMessage());
+		}
+		return name;
+	}
+
+	@Override
+	public boolean verifyLogin(String userId, String password) {
+		try {
+			if (conn == null) {
+				return false;
+			}
+
+			String sql = "SELECT user_id from users WHERE user_id = ? and password = ?";
+			PreparedStatement statement = conn.prepareStatement(sql);
+			statement.setString(1, userId);
+			statement.setString(2, password);
+			ResultSet rs = statement.executeQuery();
+			if (rs.next()) {
+				return true;
+			}
+		} catch (Exception e) {
+			System.out.println(e.getMessage());
+		}
+		return false;
+	}
+
 }
